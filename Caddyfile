@@ -1,0 +1,4 @@
+app.tudominio.com {
+    encode gzip
+    reverse_proxy web:80
+}

@@ -1,0 +1,71 @@
+name: ISUR Cloud CI CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isur-cloud-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Crear variables no sensibles para validacion
+        run: |
+          printf 'APP_DOMAIN=example.com\nMYSQL_ROOT_PASSWORD=solo-para-ci-no-publicar\n' > .env
+      - name: Validar Compose
+        run: docker compose -f compose.yaml config --quiet
+      - name: Construir contenedor web
+        run: docker build -t isur-deployment-app:${{ github.sha }} .
+      - name: Levantar y probar servicios
+        run: |
+          docker compose -f compose.yaml up -d --build
+          for i in $(seq 1 40); do
+            if docker compose -f compose.yaml exec -T web wget -q -O /dev/null http://127.0.0.1/; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker compose -f compose.yaml logs --tail=100
+          exit 1
+      - name: Limpiar validacion
+        if: always()
+        run: docker compose -f compose.yaml down -v
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preparar SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Desplegar en Azure
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          ssh -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
+            "DEPLOY_SHA='$DEPLOY_SHA' bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/apps/isur-deployment-app"
+          git fetch origin main
+          git checkout -f "$DEPLOY_SHA"
+          docker compose -f compose.yaml config --quiet
+          docker compose -f compose.yaml up -d --build --remove-orphans
+          docker compose -f compose.yaml ps
+          REMOTE

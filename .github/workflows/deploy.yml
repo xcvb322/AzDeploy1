@@ -42,6 +42,7 @@ jobs:
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    if: ${{ secrets.SSH_PRIVATE_KEY != '' && secrets.SSH_KNOWN_HOSTS != '' && secrets.VM_HOST != '' && secrets.VM_USER != '' }}
     steps:
       - name: Preparar SSH
         env:

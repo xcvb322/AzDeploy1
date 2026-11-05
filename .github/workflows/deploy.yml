@@ -47,19 +47,40 @@ jobs:
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
         run: |
+          set -euo pipefail
+          if [ -z "$VM_HOST" ]; then
+            echo "::error::Falta el secreto VM_HOST"
+            exit 1
+          fi
+          if [ -z "$VM_USER" ]; then
+            echo "::error::Falta el secreto VM_USER"
+            exit 1
+          fi
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error::Falta el secreto SSH_PRIVATE_KEY"
+            exit 1
+          fi
+          if [ -z "$SSH_KNOWN_HOSTS" ]; then
+            echo "::error::Falta el secreto SSH_KNOWN_HOSTS"
+            exit 1
+          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_key ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_key > /dev/null
       - name: Desplegar en Azure
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           DEPLOY_SHA: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/id_key -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/id_key" -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
             "DEPLOY_SHA='$DEPLOY_SHA' bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$HOME/apps/isur-deployment-app"

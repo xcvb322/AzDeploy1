@@ -50,16 +50,16 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_key ~/.ssh/known_hosts
       - name: Desplegar en Azure
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           VM_USER: ${{ secrets.VM_USER }}
           DEPLOY_SHA: ${{ github.sha }}
         run: |
-          ssh -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
+          ssh -i ~/.ssh/id_key -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" \
             "DEPLOY_SHA='$DEPLOY_SHA' bash -se" <<'REMOTE'
           set -euo pipefail
           cd "$HOME/apps/isur-deployment-app"
